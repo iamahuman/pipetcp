@@ -157,6 +157,7 @@ struct client
 	struct listhead list;
 	struct listhead list_retry_io;
 	struct listhead pipe_tx_queue;
+	struct client *closing_next;
 	struct server *srv;
 
 	DWORD next_io_retry_at;
@@ -589,6 +590,34 @@ static BOOL server_init(struct server *srv,
 	return server_register_handle(srv, (HANDLE)socket, 0);
 }
 
+static void server_close_clients(struct server *srv)
+{
+	struct client *closing_next, *cli;
+	struct listhead *item, *next;
+	unsigned int is_connected;
+
+	assert(srv->state == SERVER_TERMINATING);
+
+	closing_next = NULL;
+	for (is_connected = CLIENT_DISCONNECTED; is_connected <= CLIENT_CONNECTED; is_connected++) {
+		foreach_list_safe(&srv->clients[is_connected], item, next) {
+			cli = CONTAINING_RECORD(item, struct client, list);
+			assert(cli->closing_next == NULL);
+			cli->closing_next = closing_next;
+			closing_next = cli;
+		}
+	}
+
+	while (closing_next) {
+		cli = closing_next;
+		closing_next = cli->closing_next;
+		cli->closing_next = NULL;
+		client_close(cli);
+	}
+	assert(list_empty(&srv->clients[CLIENT_DISCONNECTED]));
+	assert(list_empty(&srv->clients[CLIENT_CONNECTED]));
+}
+
 static void server_close(struct server *srv)
 {
 	DECLARE_LISTHEAD(remove_list);
@@ -605,12 +634,7 @@ static void server_close(struct server *srv)
 
 	err = GetLastError();
 	srv->state = SERVER_TERMINATING;
-
-	foreach_list_safe(&srv->clients[CLIENT_CONNECTED], item, next)
-		client_close(CONTAINING_RECORD(item, struct client, list));
-
-	foreach_list_safe(&srv->clients[CLIENT_DISCONNECTED], item, next)
-		client_close(CONTAINING_RECORD(item, struct client, list));
+	server_close_clients(srv);
 
 	foreach_list_safe(&srv->socket_tx_queue, item, next) {
 		tx = CONTAINING_RECORD(item, struct socket_tx, list);
@@ -758,6 +782,7 @@ static BOOL client_init(struct client *cli, struct server *srv, HANDLE pipe)
 	list_init(&cli->list);
 	list_init(&cli->list_retry_io);
 	list_init(&cli->pipe_tx_queue);
+	cli->closing_next = NULL;
 	cli->srv = server_get(srv);
 	cli->is_connected = 0;
 	cli->read_pending = IOSTATE_IDLE;
