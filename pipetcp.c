@@ -804,6 +804,7 @@ retry:
 	client_get(cli);
 	cli->read_pending = IOSTATE_PENDING;
 	err = 0;
+	memset(&cli->pipe_connect_ov, 0, sizeof(cli->pipe_connect_ov));
 	res = ConnectNamedPipe(cli->pipe, &cli->pipe_connect_ov);
 
 	if (!res && (err = GetLastError()) == ERROR_IO_PENDING) {
@@ -925,6 +926,7 @@ retry:
 	server_get(srv);
 	err = 0;
 	nsent = 0;
+	memset(&srv->sock_write_ov, 0, sizeof(srv->sock_write_ov));
 	res = WSASend(
 		srv->socket,
 		item->iovs + item->iovoff,
@@ -1037,6 +1039,7 @@ retry:
 	nrecv = 0;
 	flags = 0;
 	srv->read_pending = IOSTATE_PENDING;
+	memset(&srv->sock_read_ov, 0, sizeof(srv->sock_read_ov));
 	res = WSARecv(
 		srv->socket,
 		srv->iovs,
@@ -1232,6 +1235,7 @@ retry:
 	cli->read_pending = IOSTATE_PENDING;
 	err = 0;
 	nread = 0;
+	memset(&cli->pipe_read_ov, 0, sizeof(cli->pipe_read_ov));
 	res = ReadFile(
 		cli->pipe,
 		ring_prod_base(&cli->readbuf),
@@ -1312,6 +1316,7 @@ retry:
 	client_get(cli);
 	err = 0;
 	nwritten = 0;
+	memset(&cli->pipe_write_ov, 0, sizeof(cli->pipe_write_ov));
 	res = WriteFile(
 		cli->pipe,
 		item->buffer,
