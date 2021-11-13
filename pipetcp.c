@@ -354,7 +354,7 @@ static struct client *pop_client_ref(struct client **ptr)
 
 static void client_remove_from_list(struct client *cli)
 {
-	unsigned int num;
+	unsigned long num;
 	struct server *srv = cli->srv;
 
 	check_client_obj(cli);
