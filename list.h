@@ -86,4 +86,37 @@ static struct listhead *list_last(struct listhead *item)
 		(next) = (iter)->next, (iter) != (list); \
 		(iter) = (next))
 
+struct slisthead
+{
+	struct slisthead *next;
+};
+
+static void slist_init(struct slisthead *list)
+{
+	list->next = NULL;
+}
+
+#define DECLARE_SLISTHEAD(name) struct slisthead name = { NULL }
+
+static int slist_empty(struct slisthead *list)
+{
+	return list->next == NULL;
+}
+
+static void slist_push(struct slisthead *list, struct slisthead *item)
+{
+	item->next = list->next;
+	list->next = item;
+}
+
+static struct slisthead *slist_pop(struct slisthead *list)
+{
+	struct slisthead *item = list->next;
+	if (item) {
+		list->next = item->next;
+		item->next = NULL;
+	}
+	return item;
+}
+
 #endif

@@ -157,7 +157,8 @@ struct client
 	struct listhead list;
 	struct listhead list_retry_io;
 	struct listhead pipe_tx_queue;
-	struct client *closing_next;
+	struct slisthead slist_closing;
+	struct slisthead slist_retrying;
 	struct server *srv;
 
 	DWORD next_io_retry_at;
@@ -593,27 +594,27 @@ static BOOL server_init(struct server *srv,
 
 static void server_close_clients(struct server *srv)
 {
-	struct client *closing_next, *cli;
+	DECLARE_SLISTHEAD(closing_list);
+	struct client *cli;
 	struct listhead *item, *next;
+	struct slisthead *sitem;
 	unsigned int is_connected;
 
 	assert(srv->state == SERVER_TERMINATING);
 
-	closing_next = NULL;
 	for (is_connected = CLIENT_DISCONNECTED; is_connected <= CLIENT_CONNECTED; is_connected++) {
 		foreach_list_safe(&srv->clients[is_connected], item, next) {
 			cli = CONTAINING_RECORD(item, struct client, list);
-			assert(cli->closing_next == NULL);
-			cli->closing_next = closing_next;
-			closing_next = cli;
+			client_get(cli);
+			assert(slist_empty(&cli->slist_closing));
+			slist_push(&closing_list, &cli->slist_closing);
 		}
 	}
 
-	while (closing_next) {
-		cli = closing_next;
-		closing_next = cli->closing_next;
-		cli->closing_next = NULL;
+	while ((sitem = slist_pop(&closing_list))) {
+		cli = CONTAINING_RECORD(sitem, struct client, slist_closing);
 		client_close(cli);
+		client_put(cli);
 	}
 	assert(list_empty(&srv->clients[CLIENT_DISCONNECTED]));
 	assert(list_empty(&srv->clients[CLIENT_CONNECTED]));
@@ -783,7 +784,8 @@ static BOOL client_init(struct client *cli, struct server *srv, HANDLE pipe)
 	list_init(&cli->list);
 	list_init(&cli->list_retry_io);
 	list_init(&cli->pipe_tx_queue);
-	cli->closing_next = NULL;
+	slist_init(&cli->slist_closing);
+	slist_init(&cli->slist_retrying);
 	cli->srv = server_get(srv);
 	cli->next_io_retry_at = 0;
 	cli->retry_flags = 0;
@@ -1472,32 +1474,36 @@ static DWORD server_io_complete(struct server *srv, LPOVERLAPPED overlapped, DWO
 
 static DWORD server_tick_internal(struct server *srv, DWORD cur_time)
 {
-	DECLARE_LISTHEAD(remove_list);
+	DECLARE_SLISTHEAD(retrying_list);
+	struct client *cli;
 	struct listhead *item, *next;
+	struct slisthead *sitem;
 	DWORD base_time = srv->last_tick_time;
-	DWORD next_tick, curr_tick;
+	DWORD next_tick, curr_tick, req_tick;
 
 	curr_tick = cur_time - base_time;
 	next_tick = curr_tick;
 
 	foreach_list_safe(&srv->retry_io_clients, item, next) {
-		struct client *cli = CONTAINING_RECORD(item, struct client, list_retry_io);
-		DWORD req_tick = cli->next_io_retry_at - base_time;
+		cli = CONTAINING_RECORD(item, struct client, list_retry_io);
+		req_tick = cli->next_io_retry_at - base_time;
 
 		if (req_tick <= curr_tick) {
-			list_remove(item);
-			list_append(&remove_list, item);
-		} else if (req_tick <= next_tick) {
+			client_get(cli);
+			assert(slist_empty(&cli->slist_retrying));
+			slist_push(&retrying_list, &cli->slist_retrying);
+		} else if (req_tick < next_tick)
 			next_tick = req_tick;
-		}
 	}
-	foreach_list_safe(&remove_list, item, next) {
-		struct client *cli = CONTAINING_RECORD(item, struct client, list_retry_io);
+
+	while ((sitem = slist_pop(&retrying_list))) {
 		unsigned char retry_flags;
 
+		cli = CONTAINING_RECORD(sitem, struct client, slist_retrying);
 		retry_flags = cli->retry_flags;
+
 		cli->retry_flags = 0;
-		list_remove(item);
+		list_remove(&cli->list_retry_io);
 
 		if (retry_flags & RETRY_READ) {
 			if (cli->is_connected)
@@ -1507,8 +1513,9 @@ static DWORD server_tick_internal(struct server *srv, DWORD cur_time)
 		}
 		if (retry_flags & RETRY_WRITE)
 			client_start_write(cli);
+
+		client_put(cli);
 	}
-	assert(list_empty(&remove_list));
 
 	return next_tick;
 }
