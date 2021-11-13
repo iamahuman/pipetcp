@@ -473,19 +473,20 @@ static void client_close(struct client *cli)
 
 	err = GetLastError();
 
-	if (cli->pipe != INVALID_HANDLE_VALUE) {
-		HANDLE handle = cli->pipe;
-		if (lpCancelIoEx) {
-			(*lpCancelIoEx)(handle, &cli->pipe_connect_ov);
-			(*lpCancelIoEx)(handle, &cli->pipe_read_ov);
-			(*lpCancelIoEx)(handle, &cli->pipe_write_ov);
-		} else {
-			CancelIo(handle);
+	if (cli->is_connected) {
+		if (cli->pipe != INVALID_HANDLE_VALUE) {
+			HANDLE handle = cli->pipe;
+			if (lpCancelIoEx) {
+				(*lpCancelIoEx)(handle, &cli->pipe_connect_ov);
+				(*lpCancelIoEx)(handle, &cli->pipe_read_ov);
+				(*lpCancelIoEx)(handle, &cli->pipe_write_ov);
+			} else {
+				CancelIo(handle);
+			}
+			DisconnectNamedPipe(handle);
 		}
-		DisconnectNamedPipe(handle);
+		client_set_connected(cli, FALSE);
 	}
-
-	client_set_connected(cli, FALSE);
 
 	foreach_list_safe(&cli->pipe_tx_queue, item, next) {
 		tx = CONTAINING_RECORD(item, struct pipe_tx, list);
