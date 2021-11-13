@@ -1150,7 +1150,10 @@ static DWORD update_client(struct client *cli, BOOL incoming, unsigned char supp
 	if (incoming /* accept empty datagrams */ || ring_cons_avail(&cli->readbuf))
 		start_pipe_to_socket(cli);
 
-	if (!list_empty(&cli->list) && cli->is_connected) {
+	if (list_empty(&cli->list))
+		return err;
+
+	if (cli->is_connected) {
 		if (!((cli->retry_flags | suppress_io) & RETRY_READ))
 			client_start_read(cli);
 		if (!((cli->retry_flags | suppress_io) & RETRY_WRITE))
