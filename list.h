@@ -23,6 +23,7 @@
 
 #ifndef PIPETCP_LIST_H
 #define PIPETCP_LIST_H
+#include <stddef.h>
 
 struct listhead
 {
