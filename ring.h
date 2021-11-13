@@ -88,7 +88,7 @@ static unsigned int ring_prod_peek_iovecs(struct ring *r, WSABUF *iovp)
 		i++;
 	}
 
-	if (0 && n1 < n2) {
+	if (n1 < n2) {
 		iovp[i].buf = (char *)r->buffer;
 		iovp[i].len = n2 - n1;
 		i++;
@@ -110,7 +110,7 @@ static unsigned int ring_cons_peek_iovecs(struct ring *r, WSABUF *iovp)
 		i++;
 	}
 
-	if (0 && n1 < n2) {
+	if (n1 < n2) {
 		iovp[i].buf = (char *)r->buffer;
 		iovp[i].len = n2 - n1;
 		i++;
