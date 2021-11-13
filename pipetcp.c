@@ -1071,6 +1071,9 @@ static void start_socket_to_pipe(struct server *srv, struct client *cli)
 	check_server_obj(srv);
 	check_client_obj(cli);
 
+	if (srv->state == SERVER_TERMINATING)
+		return;
+
 	if (list_empty(&tx->list)) {
 		assert(tx->state == IOSTATE_IDLE);
 
@@ -1114,14 +1117,17 @@ static DWORD update_server(struct server *srv, BOOL incoming, unsigned char supp
 static void start_pipe_to_socket(struct client *cli)
 {
 	struct socket_tx *tx = &cli->pipe2socket;
+	struct server *srv = cli->srv;
 
 	trace("start_pipe_to_socket(%p)\n", cli);
 
+	check_server_obj(srv);
 	check_client_obj(cli);
 
-	if (list_empty(&tx->list)) {
-		struct server *srv = cli->srv;
+	if (srv->state == SERVER_TERMINATING)
+		return;
 
+	if (list_empty(&tx->list)) {
 		assert(tx->state == IOSTATE_IDLE);
 
 		memset(&tx->iovs, 0, sizeof(tx->iovs));
