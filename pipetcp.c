@@ -68,6 +68,12 @@ enum status
 	IOSTATE_PENDING,
 };
 
+enum connect_status
+{
+	CLIENT_DISCONNECTED,
+	CLIENT_CONNECTED,
+};
+
 enum server_state
 {
 	SERVER_INITIALISING,
@@ -114,8 +120,7 @@ struct server
 	DWORD magic;
 	unsigned long refcount;
 
-	struct listhead disconnected_clients;
-	struct listhead connected_clients;
+	struct listhead clients[2];
 	struct listhead retry_io_clients;
 	struct listhead socket_tx_queue;
 
@@ -128,8 +133,7 @@ struct server
 	DWORD error;
 	DWORD last_tick_time;
 
-	unsigned long num_disconnected_clients;
-	unsigned long num_connected_clients;
+	unsigned long num_clients[2];
 	unsigned long num_backlog;
 	size_t required_room;
 
@@ -363,10 +367,7 @@ static void client_remove_from_list(struct client *cli)
 		return;
 
 	list_remove(&cli->list);
-	if (cli->is_connected)
-		num = srv->num_connected_clients--;
-	else
-		num = srv->num_disconnected_clients--;
+	num = srv->num_clients[!!cli->is_connected]--;
 
 	if (!num) {
 		fprintf(stderr, "counter underflow\n");
@@ -384,13 +385,8 @@ static void client_add_to_list(struct client *cli)
 	if (!srv || !list_empty(&cli->list))
 		return;
 
-	if (cli->is_connected) {
-		list_append(&srv->connected_clients, &cli->list);
-		num = ++srv->num_connected_clients;
-	} else {
-		list_append(&srv->disconnected_clients, &cli->list);
-		num = ++srv->num_disconnected_clients;
-	}
+	list_append(&srv->clients[!!cli->is_connected], &cli->list);
+	num = ++srv->num_clients[!!cli->is_connected];
 
 	if (!num) {
 		fprintf(stderr, "counter overflow\n");
@@ -538,7 +534,7 @@ static unsigned long server_get_num_clients(struct server const *srv)
 {
 	check_server_obj(srv);
 
-	return srv->num_disconnected_clients + srv->num_connected_clients;
+	return srv->num_clients[CLIENT_DISCONNECTED] + srv->num_clients[CLIENT_CONNECTED];
 }
 
 static BOOL server_register_handle(struct server *srv, HANDLE handle, ULONG_PTR key)
@@ -566,8 +562,8 @@ static BOOL server_init(struct server *srv,
 {
 	srv->magic = SERVER_OBJ_MAGIC;
 	srv->refcount = 1;
-	list_init(&srv->disconnected_clients);
-	list_init(&srv->connected_clients);
+	list_init(&srv->clients[CLIENT_DISCONNECTED]);
+	list_init(&srv->clients[CLIENT_CONNECTED]);
 	list_init(&srv->retry_io_clients);
 	list_init(&srv->socket_tx_queue);
 	srv->params = *params;
@@ -576,8 +572,8 @@ static BOOL server_init(struct server *srv,
 	srv->state = SERVER_INITIALISING;
 	srv->read_pending = IOSTATE_IDLE;
 	srv->error = ERROR_SUCCESS;
-	srv->num_disconnected_clients = 0;
-	srv->num_connected_clients = 0;
+	srv->num_clients[CLIENT_DISCONNECTED] = 0;
+	srv->num_clients[CLIENT_CONNECTED] = 0;
 	srv->num_backlog = backlog;
 	srv->required_room = 1;
 	srv->iocp = NULL;
@@ -610,10 +606,10 @@ static void server_close(struct server *srv)
 	err = GetLastError();
 	srv->state = SERVER_TERMINATING;
 
-	foreach_list_safe(&srv->connected_clients, item, next)
+	foreach_list_safe(&srv->clients[CLIENT_CONNECTED], item, next)
 		client_close(CONTAINING_RECORD(item, struct client, list));
 
-	foreach_list_safe(&srv->disconnected_clients, item, next)
+	foreach_list_safe(&srv->clients[CLIENT_DISCONNECTED], item, next)
 		client_close(CONTAINING_RECORD(item, struct client, list));
 
 	foreach_list_safe(&srv->socket_tx_queue, item, next) {
@@ -665,7 +661,7 @@ static BOOL server_is_accepting_clients(struct server *srv, unsigned long count)
 		return FALSE;
 
 	if (count > srv->num_backlog ||
-	    srv->num_disconnected_clients > srv->num_backlog - count)
+	    srv->num_clients[CLIENT_DISCONNECTED] > srv->num_backlog - count)
 		return FALSE;
 
 	max_clients = srv->params.max_instances == PIPE_UNLIMITED_INSTANCES
@@ -1101,9 +1097,9 @@ static DWORD update_server(struct server *srv, BOOL incoming, unsigned char supp
 
 	check_server_obj(srv);
 
-	if (!list_empty(&srv->connected_clients) &&
+	if (!list_empty(&srv->clients[CLIENT_CONNECTED]) &&
 	    (incoming || ring_cons_avail(&srv->readbuf))) {
-		cli = CONTAINING_RECORD(list_last(&srv->connected_clients), struct client, list);
+		cli = CONTAINING_RECORD(list_last(&srv->clients[CLIENT_CONNECTED]), struct client, list);
 		start_socket_to_pipe(srv, cli);
 	}
 
@@ -1618,7 +1614,7 @@ static DWORD server_loop(struct server *srv)
 		if (!srv->refcount)
 			break;
 
-		trace("\n==== LOOP #refs=%lu #disconnected-clients=%lu #connected_clients=%lu ===\n", srv->refcount, srv->num_disconnected_clients, srv->num_connected_clients);
+		trace("\n==== LOOP #refs=%lu #disconnected-clients=%lu #connected_clients=%lu ===\n", srv->refcount, srv->num_clients[CLIENT_DISCONNECTED], srv->num_clients[CLIENT_CONNECTED]);
 
 		numbytes = 0;
 		key = 0;
