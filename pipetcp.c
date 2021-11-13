@@ -462,7 +462,9 @@ static BOOL client_is_reusable(struct client *cli)
 
 static void client_close(struct client *cli)
 {
+	DECLARE_LISTHEAD(remove_list);
 	struct listhead *item, *next;
+	struct pipe_tx *tx;
 	DWORD err;
 
 	trace("client_disconnect(%p)\n", cli);
@@ -486,10 +488,18 @@ static void client_close(struct client *cli)
 	client_set_connected(cli, FALSE);
 
 	foreach_list_safe(&cli->pipe_tx_queue, item, next) {
-		struct pipe_tx *tx = CONTAINING_RECORD(item, struct pipe_tx, list);
-		if (tx->state == IOSTATE_IDLE)
-			remove_pipe_tx(tx);
+		tx = CONTAINING_RECORD(item, struct pipe_tx, list);
+		if (tx->state == IOSTATE_IDLE) {
+			list_remove(item);
+			list_append(&remove_list, item);
+		}
 	}
+	foreach_list_safe(&remove_list, item, next) {
+		tx = CONTAINING_RECORD(item, struct pipe_tx, list);
+		remove_pipe_tx(tx);
+		assert(next->prev != item);
+	}
+	assert(list_empty(&remove_list));
 
 	update_client(cli, FALSE, 0);
 	SetLastError(err);
@@ -584,7 +594,9 @@ static BOOL server_init(struct server *srv,
 
 static void server_close(struct server *srv)
 {
+	DECLARE_LISTHEAD(remove_list);
 	struct listhead *item, *next;
+	struct socket_tx *tx;
 	DWORD err;
 
 	trace("server_close(%p)\n", srv);
@@ -604,10 +616,18 @@ static void server_close(struct server *srv)
 		client_close(CONTAINING_RECORD(item, struct client, list));
 
 	foreach_list_safe(&srv->socket_tx_queue, item, next) {
-		struct socket_tx *tx = CONTAINING_RECORD(item, struct socket_tx, list);
-		if (tx->state == IOSTATE_IDLE)
-			remove_socket_tx(tx);
+		tx = CONTAINING_RECORD(item, struct socket_tx, list);
+		if (tx->state == IOSTATE_IDLE) {
+			list_remove(item);
+			list_append(&remove_list, item);
+		}
 	}
+	foreach_list_safe(&remove_list, item, next) {
+		tx = CONTAINING_RECORD(item, struct socket_tx, list);
+		remove_socket_tx(tx);
+		assert(next->prev != item);
+	}
+	assert(list_empty(&remove_list));
 
 	if (srv->socket != INVALID_SOCKET) {
 		HANDLE handle = (HANDLE)srv->socket;
@@ -1413,6 +1433,7 @@ static DWORD server_io_complete(struct server *srv, LPOVERLAPPED overlapped, DWO
 
 static DWORD server_tick_internal(struct server *srv, DWORD cur_time)
 {
+	DECLARE_LISTHEAD(remove_list);
 	struct listhead *item, *next;
 	DWORD base_time = srv->last_tick_time;
 	DWORD next_tick, curr_tick;
@@ -1422,23 +1443,33 @@ static DWORD server_tick_internal(struct server *srv, DWORD cur_time)
 
 	foreach_list_safe(&srv->retry_io_clients, item, next) {
 		struct client *cli = CONTAINING_RECORD(item, struct client, list_retry_io);
-		unsigned char retry_flags = cli->retry_flags;
 		DWORD req_tick = cli->next_io_retry_at - base_time;
 
 		if (req_tick <= curr_tick) {
-			if (retry_flags & RETRY_READ) {
-				if (!cli->is_connected) {
-					client_start_connect(cli);
-				} else {
-					client_start_read(cli);
-				}
-			}
-			if (retry_flags & RETRY_WRITE)
-				client_start_write(cli);
+			list_remove(item);
+			list_append(&remove_list, item);
 		} else if (req_tick <= next_tick) {
 			next_tick = req_tick;
 		}
 	}
+	foreach_list_safe(&remove_list, item, next) {
+		struct client *cli = CONTAINING_RECORD(item, struct client, list_retry_io);
+		unsigned char retry_flags;
+
+		retry_flags = cli->retry_flags;
+		cli->retry_flags = 0;
+		list_remove(item);
+
+		if (retry_flags & RETRY_READ) {
+			if (cli->is_connected)
+				client_start_read(cli);
+			else
+				client_start_connect(cli);
+		}
+		if (retry_flags & RETRY_WRITE)
+			client_start_write(cli);
+	}
+	assert(list_empty(&remove_list));
 
 	return next_tick;
 }

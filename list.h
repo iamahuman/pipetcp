@@ -36,6 +36,8 @@ static void list_init(struct listhead *list)
 	list->prev = list;
 }
 
+#define DECLARE_LISTHEAD(name) struct listhead name = { &name, &name }
+
 static int list_empty(struct listhead *list)
 {
 	return list->next == list && list->prev == list;
