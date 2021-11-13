@@ -573,6 +573,7 @@ static BOOL server_init(struct server *srv,
 	srv->state = SERVER_INITIALISING;
 	srv->read_pending = IOSTATE_IDLE;
 	srv->error = ERROR_SUCCESS;
+	srv->last_tick_time = 0;
 	srv->num_clients[CLIENT_DISCONNECTED] = 0;
 	srv->num_clients[CLIENT_CONNECTED] = 0;
 	srv->num_backlog = backlog;
@@ -784,6 +785,8 @@ static BOOL client_init(struct client *cli, struct server *srv, HANDLE pipe)
 	list_init(&cli->pipe_tx_queue);
 	cli->closing_next = NULL;
 	cli->srv = server_get(srv);
+	cli->next_io_retry_at = 0;
+	cli->retry_flags = 0;
 	cli->is_connected = 0;
 	cli->read_pending = IOSTATE_IDLE;
 	cli->required_room = 1;
