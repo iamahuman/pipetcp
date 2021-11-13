@@ -15,12 +15,17 @@ endif
 
 CC = $(CROSSPREFIX)gcc
 WINDRES = $(CROSSPREFIX)windres
+OBJCOPY = $(CROSSPREFIX)objcopy
 
 CFLAGS = -Wall -Wextra -g -O2 $(MINGW_EXTRACFLAGS) $(EXTRACFLAGS)
 LDFLAGS = -municode -mconsole -Wl,--tsaware -Wl,--nxcompat -Wl,--dynamicbase $(MINGW_EXTRALDFLAGS) $(EXTRALDFLAGS) $(LDFLAGS_ARCH)
 LIBS = -lkernel32 -ladvapi32 -lws2_32
 
+DISTBIN_FILE = pipetcp_$(notdir $(O:/=)).exe
+
 all: $(O)pipetcp.exe
+
+dist: $(DISTBIN_FILE)
 
 $(O)pipetcp.exe: $(O)pipetcp.o $(O)rsrc.o
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS) $(LIBS)
@@ -31,7 +36,10 @@ $(O)pipetcp.o: pipetcp.c list.h ring.h errors.h udm.h
 $(O)rsrc.o: pipetcp.rc version.h
 	$(WINDRES) --output-format=coff -o $@ $<
 
-clean:
-	@rm -f $(O)pipetcp.exe $(O)pipetcp.o $(O)rsrc.o
+$(DISTBIN_FILE): $(O)pipetcp.exe
+	objcopy -g $< $@
 
-.PHONY: all clean
+clean:
+	@rm -f $(O)pipetcp.exe $(O)pipetcp.o $(O)rsrc.o $(DISTBIN_FILE)
+
+.PHONY: all clean dist
