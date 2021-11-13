@@ -28,7 +28,7 @@ $(O)pipetcp.exe: $(O)pipetcp.o $(O)rsrc.o
 $(O)pipetcp.o: pipetcp.c list.h ring.h errors.h udm.h
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-$(O)rsrc.o: pipetcp.rc
+$(O)rsrc.o: pipetcp.rc version.h
 	$(WINDRES) --output-format=coff -o $@ $<
 
 clean:
