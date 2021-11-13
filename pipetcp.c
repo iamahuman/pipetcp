@@ -467,7 +467,7 @@ static void client_close(struct client *cli)
 	struct pipe_tx *tx;
 	DWORD err;
 
-	trace("client_disconnect(%p)\n", cli);
+	trace("client_close(%p)\n", cli);
 
 	check_client_obj(cli);
 
