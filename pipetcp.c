@@ -1531,7 +1531,8 @@ static DWORD server_get_wait_time(struct server *srv, DWORD next_tick, DWORD cur
 		return INFINITE;
 
 	wait_ticks = next_time - cur_time;
-	return wait_ticks > drift ? wait_ticks - drift : 0;
+	wait_ticks = wait_ticks >= drift ? wait_ticks - drift : 0;
+	return wait_ticks - (wait_ticks == INFINITE);
 }
 
 static DWORD server_tick(struct server *srv)
