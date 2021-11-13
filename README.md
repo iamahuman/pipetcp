@@ -1,16 +1,19 @@
 # PipeTcp
 
-A Windows named pipe server that forwards connections to given TCP server.
+An asynchronous Windows named pipe server that forwards connections to given TCP server.
 
 Pre-built binaries can be found in [Releases](https://github.com/iamahuman/pipetcp/releases).
 
 ## Invocation
 
-`pipetcp <PIPE-PATH> <SERVER-HOST> <SERVER-PORT>`
+- Command Prompt: `pipetcp <PIPE-PATH> <SERVER-HOST> <SERVER-PORT>`
+- PowerShell: `.\piptcp <PIPE-PATH> <SERVER-HOST> <SERVER-PORT>`
 
 Example:
 
-`pipetcp \\.\PIPE\LOCAL\Dbg1 192.168.34.56 17103`
+- `pipetcp \\.\PIPE\LOCAL\Dbg1 192.168.34.56 17103`
+
+  Connect to the TCP server at `192.168.34.56:17103`, open a pipe server at `\\.\PIPE\LOCAL\Dbg`, and bridge the pipe client and the TCP server.
 
 ## Building (MinGW)
 
