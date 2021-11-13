@@ -1650,7 +1650,7 @@ static DWORD server_loop(struct server *srv)
 		if (!srv->refcount)
 			break;
 
-		trace("\n==== LOOP #refs=%lu #disconnected-clients=%lu #connected_clients=%lu ===\n", srv->refcount, srv->num_clients[CLIENT_DISCONNECTED], srv->num_clients[CLIENT_CONNECTED]);
+		trace("\n==== LOOP #refs=%lu #listening=%lu #connections=%lu ===\n", srv->refcount, srv->num_clients[CLIENT_DISCONNECTED], srv->num_clients[CLIENT_CONNECTED]);
 
 		numbytes = 0;
 		key = 0;
