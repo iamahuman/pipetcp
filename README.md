@@ -7,7 +7,7 @@ Pre-built binaries can be found in [Releases](https://github.com/iamahuman/pipet
 ## Invocation
 
 - Command Prompt: `pipetcp <PIPE-PATH> <SERVER-HOST> <SERVER-PORT>`
-- PowerShell: `.\piptcp <PIPE-PATH> <SERVER-HOST> <SERVER-PORT>`
+- PowerShell: `.\pipetcp <PIPE-PATH> <SERVER-HOST> <SERVER-PORT>`
 
 Example:
 
